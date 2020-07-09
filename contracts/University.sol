@@ -1,14 +1,13 @@
-pragma solidity ^0.6.6;
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+pragma solidity ^0.6.11;
+
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@uniswap/lib/contracts/libraries/TransferHelper.sol";
-import "@opengsn/gsn/contracts/interfaces/IRelayHub.sol";
-import "@opengsn/gsn/contracts/utils/GSNTypes.sol";
-import "@opengsn/gsn/contracts/BaseRelayRecipient.sol";
 import "./interface/IClassroom.sol";
 import "./interface/IStudent.sol";
 import "./interface/IStudentApplication.sol";
@@ -23,7 +22,7 @@ import "./MyUtils.sol";
 //TODO: Natspec Document ENVERYTHING
 //TODO: Sort function order from all contracts
 
-contract University is Ownable, AccessControl, BaseRelayRecipient, IUniversity {
+contract University is Ownable, AccessControl, IUniversity {
     using SafeMath for uint256;
 
     //CLASSLIST_ADMIN_ROLE can add new manually created classes to the list
@@ -85,9 +84,6 @@ contract University is Ownable, AccessControl, BaseRelayRecipient, IUniversity {
     address public daiToken;
     address public cDAI;
 
-    //GSN
-    IRelayHub public relayHub;
-
     //Factory
     address public classroomFactory;
     address public studentFactory;
@@ -104,7 +100,6 @@ contract University is Ownable, AccessControl, BaseRelayRecipient, IUniversity {
     /// @param name_ Given name for the university
     /// @param cut_ Cut from professor payments, in PPM
     /// @param daiAddress Adress of contract in the network
-    /// @param relayHubAddress Adress of contract in the network
     /// @param classroomFactoryAddress Adress of contract in the network
     /// @param studentFactoryAddress Adress of contract in the network
     /// @param studentApplicationFactoryAddress Adress of contract in the network
@@ -113,7 +108,6 @@ contract University is Ownable, AccessControl, BaseRelayRecipient, IUniversity {
         uint24 cut_,
         address daiAddress,
         address compoundDai,
-        address relayHubAddress,
         address classroomFactoryAddress,
         address studentFactoryAddress,
         address studentApplicationFactoryAddress,
@@ -129,7 +123,6 @@ contract University is Ownable, AccessControl, BaseRelayRecipient, IUniversity {
         grantRole(CLASSLIST_ADMIN_ROLE, _msgSender());
         daiToken = daiAddress;
         cDAI = compoundDai;
-        relayHub = IRelayHub(relayHubAddress);
         classroomFactory = classroomFactoryAddress;
         studentFactory = studentFactoryAddress;
         studentApplicationFactory = studentApplicationFactoryAddress;
@@ -147,16 +140,6 @@ contract University is Ownable, AccessControl, BaseRelayRecipient, IUniversity {
     /// @notice Withdraw ETH from the contract
     function withdraw(uint256 val) public onlyOwner {
         TransferHelper.safeTransferETH(_msgSender(), val);
-    }
-
-    /// @notice Transfer ETH to the relayHub
-    function refilRelayHub(uint256 val) public onlyOwner {
-        relayHub.depositFor{value:val}(address(this));
-    }
-
-    /// @notice Withdraw ETH to the relayHub
-    function withdrawRelayHub(uint256 val) public onlyOwner {
-        relayHub.withdraw(val, address(this));
     }
 
     /// @notice Records the name and address of every new classroom created
@@ -178,7 +161,6 @@ contract University is Ownable, AccessControl, BaseRelayRecipient, IUniversity {
 
     /// @notice Update external contracts addresses
     /// @param daiAddress Address of contract in the network
-    /// @param relayHubAddress Address of contract in the network
     /// @param classroomFactoryAddress Address of contract in the network
     /// @param studentFactoryAddress Address of contract in the network
     /// @param studentApplicationFactoryAddress Address of contract in the network
@@ -188,7 +170,6 @@ contract University is Ownable, AccessControl, BaseRelayRecipient, IUniversity {
     function updateAddresses(
         address daiAddress,
         address compoundDai,
-        address relayHubAddress,
         address classroomFactoryAddress,
         address studentFactoryAddress,
         address studentApplicationFactoryAddress,
@@ -198,7 +179,6 @@ contract University is Ownable, AccessControl, BaseRelayRecipient, IUniversity {
         address ensReverseRegistrarAddress) public onlyOwner{
         daiToken = daiAddress == address(0) ? daiToken : daiAddress;
         cDAI = compoundDai == address(0) ? cDAI : compoundDai;
-        relayHub = relayHubAddress == address(0) ? relayHub : IRelayHub(relayHubAddress);
         classroomFactory = classroomFactoryAddress == address(0) ? classroomFactory : classroomFactoryAddress;
         studentFactory = studentFactoryAddress == address(0) ? studentFactory : studentFactoryAddress;
         studentApplicationFactory = studentApplicationFactoryAddress == address(0) ? studentApplicationFactory : studentApplicationFactoryAddress;
@@ -367,14 +347,6 @@ contract University is Ownable, AccessControl, BaseRelayRecipient, IUniversity {
     }
 
     // Student registry logic
-
-    /// @notice Self-register function where an address can create an instance of a Student in this University
-    /// @dev This GSN implementation is buggy
-    /// @param sName Name of the Student
-    function studentSelfRegisterGSN(bytes32 sName) public {
-        address student = _newStudent(sName, _msgSender());
-        relayHub.depositFor{value:_studentGSNDeposit}(student);
-    }
 
     /// @notice Self-register function where an address can create an instance of a Student in this University
     /// @param sName Name of the Student
@@ -776,42 +748,6 @@ contract University is Ownable, AccessControl, BaseRelayRecipient, IUniversity {
             "University: caller doesn't have UNIVERSITY_OVERSEER_ROLE"
         );
         return IGrantsManager(grantsManager).viewAllGrantsForStudent(student);
-    }
-
-    // GSN implementation
-
-    /// @notice GSN specific implementation
-    function _msgSender()
-    internal 
-    view 
-    override(Context, BaseRelayRecipient) 
-    returns (address payable sender){
-        return BaseRelayRecipient._msgSender();
-    }
-
-    /// @notice GSN specific implementation
-    /// @dev The idea here is only to allow GSN interactions with one specific funcion
-    function acceptRelayedCall(
-        GSNTypes.RelayRequest calldata relayRequest,
-        bytes calldata,
-        uint256
-    ) external pure returns (bytes memory context) {
-        require(
-            MyUtils.readBytes4(relayRequest.encodedFunction, 0) ==
-                this.studentSelfRegisterGSN.selector,
-            "University: GSN not enabled for this function"
-        );
-        return abi.encode(relayRequest.target, 0);
-    }
-
-    /// @notice Allow a Funds Manager to refill the GSN relayer using the University ETH funds
-    /// @param val Value to be deposited in the relayer, in WEI
-    function refillUniversityRelayer(uint256 val) public {
-        require(
-            hasRole(FUNDS_MANAGER_ROLE, _msgSender()) || _msgSender() == owner(),
-            "University: caller doesn't have FUNDS_MANAGER_ROLE"
-        );
-        relayHub.depositFor{value:val}(address(this));
     }
 
     // Donations feature

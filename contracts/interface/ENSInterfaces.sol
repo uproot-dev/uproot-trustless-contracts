@@ -1,6 +1,7 @@
-pragma solidity ^0.6.6;
-pragma experimental ABIEncoderV2;
+// SPDX-License-Identifier: GPL-3.0-or-later
 
+pragma solidity ^0.6.11;
+pragma experimental ABIEncoderV2;
 
 interface IENS {
     // Logged when the owner of a node assigns a new owner to a subnode.

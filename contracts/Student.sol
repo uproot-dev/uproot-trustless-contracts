@@ -1,14 +1,12 @@
-pragma solidity ^0.6.6;
-pragma experimental ABIEncoderV2;
+// SPDX-License-Identifier: GPL-3.0-or-later
 
+pragma solidity ^0.6.11;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@nomiclabs/buidler/console.sol";
-import "@opengsn/gsn/contracts/utils/GSNTypes.sol";
-import "@opengsn/gsn/contracts/BaseRelayRecipient.sol";
 import "./interface/IStudent.sol";
 import "./interface/IClassroom.sol";
 import "./interface/IUniversity.sol";
@@ -17,7 +15,7 @@ import "./interface/IGrantsManager.sol";
 import "./MyUtils.sol";
 
 
-contract Student is Ownable, AccessControl, BaseRelayRecipient, IStudent {
+contract Student is Ownable, AccessControl, IStudent {
     using SafeMath for uint256;
 
     //READ_SCORE_ROLE can read student Score
@@ -228,34 +226,4 @@ contract Student is Ownable, AccessControl, BaseRelayRecipient, IStudent {
             "Student: grant denied"
         );
     }
-
-    function _msgSender()
-    internal 
-    view 
-    override(Context, BaseRelayRecipient) 
-    returns (address payable sender){
-        return BaseRelayRecipient._msgSender();
-    }
-
-    function acceptRelayedCall(
-        GSNTypes.RelayRequest calldata relayRequest,
-        bytes calldata,
-        uint256
-    ) external view returns (bytes memory context) {
-        require(
-            _msgSender() == owner(),
-            "Student: GSN enabled only for the student"
-        );
-        return abi.encode(relayRequest.target, 0);
-    }
-
-    function preRelayedCall(bytes calldata) external returns (bytes32) {}
-
-    function postRelayedCall(
-        bytes calldata,
-        bool success,
-        bytes32,
-        uint256,
-        GSNTypes.GasData calldata
-    ) external {}
 }

@@ -1,12 +1,9 @@
-pragma solidity ^0.6.6;
+// SPDX-License-Identifier: GPL-3.0-or-later
+pragma solidity ^0.6.11;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@chainlink/contracts/src/v0.6/ChainlinkClient.sol";
-import "@chainlink/contracts/src/v0.6/interfaces/LinkTokenInterface.sol";
-import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router01.sol";
-import "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 import "@nomiclabs/buidler/console.sol";
 import "./interface/Aave/aToken.sol";
 import "./interface/Aave/ILendingPool.sol";
@@ -20,19 +17,20 @@ import "./interface/IStudentApplicationFactory.sol";
 import "./MyUtils.sol";
 
 
-contract Classroom is Ownable, ChainlinkClient, IClassroom {
+contract Classroom is Ownable, IClassroom {
+    using SafeMath for uint256;
+
     IUniversity public university;
     bool public openForApplication;
     bool public courseFinished;
     bool public classroomActive;
     uint256 public startDate;
-    bool _timestampAlarm;
-    address[] _studentApplications;
-    address[] _validStudentApplications;
+    uint256 public endDate;
+    address[] private _studentApplications;
+    address[] private _validStudentApplications;
     mapping(address => address) _studentApplicationsLink;
-    uint256 _endDate;
-    uint256 _courseBalance;
-    bytes32 _seed;
+    uint256 private _courseBalance;
+    bytes32 private _seed;
 
     //Classroom parameters
     bytes32 public name;
@@ -47,29 +45,15 @@ contract Classroom is Ownable, ChainlinkClient, IClassroom {
     //Tokens
     address public daiToken;
     address public cDAI;
+    address public aDAI;
 
     //Factory
     IStudentApplicationFactory public studentApplicationFactory;
-
-    //Chainlink config
-    address public oracleRandom;
-    bytes32 public requestIdRandom;
-    uint256 public oraclePaymentRandom;
-    address public oracleTimestamp;
-    bytes32 public requestIdTimestamp;
-    uint256 public oraclePaymentTimestamp;
-    address public linkToken;
-
-    //Uniswap Config
-    address public uniswapDAI;
-    address public uniswapLINK;
-    IUniswapV2Router01 public uniswapRouter;
 
     //Aave Config
     ILendingPoolAddressesProvider public aaveProvider;
     ILendingPool public aaveLendingPool;
     address public aaveLendingPoolCore;
-    address public aTokenDAI;
 
     constructor(
         bytes32 name_,
@@ -113,44 +97,6 @@ contract Classroom is Ownable, ChainlinkClient, IClassroom {
     event LogChangeEntryPrice(uint256);
     event LogChangeDuration(uint256);
 
-    // @dev "Stack too deep" error if done in the constructor
-    function configureOracles(
-        address oracleRandom_,
-        bytes32 requestIdRandom_,
-        uint256 oraclePaymentRandom_,
-        address oracleTimestamp_,
-        bytes32 requestIdTimestamp_,
-        uint256 oraclePaymentTimestamp_,
-        address linkToken_,
-        bool generateSeed
-    ) public onlyOwner {
-        oracleRandom = oracleRandom_;
-        requestIdRandom = requestIdRandom_;
-        oraclePaymentRandom = oraclePaymentRandom_;
-        oracleTimestamp = oracleTimestamp_;
-        requestIdTimestamp = requestIdTimestamp_;
-        oraclePaymentTimestamp = oraclePaymentTimestamp_;
-        linkToken = linkToken_;
-        setChainlinkToken(linkToken_);
-        require(
-            LinkTokenInterface(linkToken).balanceOf(address(this)) >=
-                oraclePaymentRandom,
-            "Classroom: not enough Link tokens"
-        );
-        if (generateSeed) _generateSeed();
-        else _seed = blockhash(0);
-    }
-
-    function configureUniswap(
-        address uniswapDAI_,
-        address uniswapLINK_,
-        address uniswapRouter_
-    ) public onlyOwner {
-        uniswapDAI = uniswapDAI_;
-        uniswapLINK = uniswapLINK_;
-        uniswapRouter = IUniswapV2Router01(uniswapRouter_);
-    }
-
     function configureAave(address lendingPoolAddressesProvider)
         public
         onlyOwner
@@ -160,7 +106,7 @@ contract Classroom is Ownable, ChainlinkClient, IClassroom {
         );
         aaveLendingPoolCore = aaveProvider.getLendingPoolCore();
         aaveLendingPool = ILendingPool(aaveProvider.getLendingPool());
-        aTokenDAI = ILendingPoolCore(aaveLendingPoolCore)
+        aDAI = ILendingPoolCore(aaveLendingPoolCore)
             .getReserveATokenAddress(daiToken);
     }
 
@@ -236,8 +182,6 @@ contract Classroom is Ownable, ChainlinkClient, IClassroom {
     }
 
     function openApplications() public onlyOwner {
-        require(oracleRandom != address(0), "Classroom: setup oracles first");
-        require(uniswapDAI != address(0), "Classroom: setup Uniswap first");
         require(
             aaveLendingPoolCore != address(0),
             "Classroom: setup Aave first"
@@ -249,11 +193,6 @@ contract Classroom is Ownable, ChainlinkClient, IClassroom {
         require(
             _studentApplications.length == 0,
             "Classroom: students list not empty"
-        );
-        require(
-            LinkTokenInterface(linkToken).balanceOf(address(this)) >=
-                oraclePaymentTimestamp,
-            "Classroom: not enough Link tokens"
         );
         openForApplication = true;
         emit LogOpenApplications();
@@ -372,7 +311,7 @@ contract Classroom is Ownable, ChainlinkClient, IClassroom {
         return _validStudentApplications.length;
     }
 
-    function beginCourse(bool setAlatm)
+    function beginCourse()
         public
         onlyOwner
     {
@@ -387,8 +326,7 @@ contract Classroom is Ownable, ChainlinkClient, IClassroom {
         if (_validStudentApplications.length == 0) return;
         classroomActive = true;
         startDate = block.timestamp;
-        if (setAlatm) _setAlarm();
-        else _timestampAlarm = true;
+        endDate = startDate.add(duration);
     }
 
     function checkApplications() internal {
@@ -410,7 +348,7 @@ contract Classroom is Ownable, ChainlinkClient, IClassroom {
             _validStudentApplications.length > 0,
             "Classroom: no applications"
         );
-        require(_timestampAlarm, "Classroom: too soon to finish course");
+        require(now >= endDate, "Classroom: too soon to finish course");
         _courseBalance = IERC20(daiToken).balanceOf(address(this));
         _recoverInvestment();
         courseFinished = true;
@@ -427,8 +365,8 @@ contract Classroom is Ownable, ChainlinkClient, IClassroom {
     function _recoverInvestment() internal {
         uint256 balanceCompound = CERC20(cDAI).balanceOf(address(this));
         CERC20(cDAI).redeem(balanceCompound);
-        uint256 balanceAave = aToken(aTokenDAI).balanceOf(address(this));
-        aToken(aTokenDAI).redeem(balanceAave);
+        uint256 balanceAave = aToken(aDAI).balanceOf(address(this));
+        aToken(aDAI).redeem(balanceAave);
     }
 
     uint256 public coursePostBalance;
@@ -649,7 +587,6 @@ contract Classroom is Ownable, ChainlinkClient, IClassroom {
         studentAllowances = new uint256[](0);
         courseFinished = false;
         classroomActive = false;
-        _timestampAlarm = false;
     }
 
     function _mutateSeed() internal {
@@ -659,67 +596,5 @@ contract Classroom is Ownable, ChainlinkClient, IClassroom {
     function withdrawAllResults() public onlyOwner {
         require(isClassroomEmpty(), "Can't withdraw with classroom full");
         TransferHelper.safeTransfer(daiToken, owner(), IERC20(daiToken).balanceOf(address(this)));
-    }
-
-    function swapDAI_LINK(uint256 amount, uint256 deadline) public onlyOwner {
-        require(uniswapLINK != address(0), "University: setup uniswap first");
-        swapBlind(uniswapDAI, uniswapLINK, amount, deadline);
-    }
-
-    function swapLINK_DAI(uint256 amount, uint256 deadline) public onlyOwner {
-        require(uniswapLINK != address(0), "University: setup uniswap first");
-        swapBlind(uniswapLINK, uniswapDAI, amount, deadline);
-    }
-
-    function swapBlind(
-        address tokenA,
-        address tokenB,
-        uint256 amount,
-        uint256 deadline
-    ) internal {
-        TransferHelper.safeApprove(tokenA, address(uniswapRouter), amount);
-        address[] memory path = new address[](2);
-        path[0] = tokenA;
-        path[1] = tokenB;
-        uniswapRouter.swapExactTokensForTokens(
-            amount,
-            0,
-            path,
-            address(this),
-            deadline
-        );
-    }
-
-    function _generateSeed() internal {
-        Chainlink.Request memory req = buildChainlinkRequest(
-            requestIdRandom,
-            address(this),
-            this.fulfillGenerateSeed.selector
-        );
-        sendChainlinkRequestTo(oracleRandom, req, oraclePaymentRandom);
-    }
-
-    function fulfillGenerateSeed(bytes32 _requestId, uint256 data)
-        public
-        recordChainlinkFulfillment(_requestId)
-    {
-        _seed = keccak256(MyUtils._toBytes(data));
-    }
-
-    function _setAlarm() internal {
-        Chainlink.Request memory req = buildChainlinkRequest(
-            requestIdTimestamp,
-            address(this),
-            this.fulfillGetTimestamp.selector
-        );
-        req.addUint("until", now + duration);
-        sendChainlinkRequestTo(oracleTimestamp, req, oraclePaymentTimestamp);
-    }
-
-    function fulfillGetTimestamp(bytes32 _requestId)
-        public
-        recordChainlinkFulfillment(_requestId)
-    {
-        _timestampAlarm = true;
     }
 }

@@ -1,12 +1,11 @@
-pragma solidity ^0.6.6;
-pragma experimental ABIEncoderV2;
+
+// SPDX-License-Identifier: GPL-3.0-or-later
+pragma solidity ^0.6.11;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router01.sol";
-import "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 import "./interface/Aave/aToken.sol";
 import "./interface/Aave/ILendingPool.sol";
 import "./interface/Aave/ILendingPoolAddressesProvider.sol";
@@ -21,11 +20,6 @@ contract UniversityFund is Ownable, AccessControl, IUniversityFund {
     bytes32 public constant FUNDS_MANAGER_ROLE = keccak256(
         "FUNDS_MANAGER_ROLE"
     );
-
-    //Uniswap Config
-    address _uniswapWETH;
-    address _uniswapDAI;
-    IUniswapV2Router01 public _uniswapRouter;
 
     //Compound Config
     CERC20 public cDAI;
@@ -48,9 +42,6 @@ contract UniversityFund is Ownable, AccessControl, IUniversityFund {
         address compoundDAIAddress,
         address comptrollerAddress,
         address priceOracleAddress,
-        address uniswapWETH,
-        address uniswapDAI,
-        address uniswapRouter,
         address lendingPoolAddressesProvider
     ) public {
         transferOwnership(university);
@@ -60,9 +51,6 @@ contract UniversityFund is Ownable, AccessControl, IUniversityFund {
         cDAI = CERC20(compoundDAIAddress);
         comptroller = IComptroller(comptrollerAddress);
         priceOracle = IPriceOracle(priceOracleAddress);
-        _uniswapWETH = uniswapWETH;
-        _uniswapDAI = uniswapDAI;
-        _uniswapRouter = IUniswapV2Router01(uniswapRouter);
         _aaveProvider = ILendingPoolAddressesProvider(lendingPoolAddressesProvider);
         _aaveLendingPool = ILendingPool(_aaveProvider.getLendingPool());
         _aaveLendingPoolCore = _aaveProvider.getLendingPoolCore();
@@ -309,62 +297,5 @@ contract UniversityFund is Ownable, AccessControl, IUniversityFund {
             "University: caller doesn't have FUNDS_MANAGER_ROLE"
         );
         _aaveLendingPool.swapBorrowRateMode(token);
-    }
-
-    /// @notice Allow a Funds Manager to swap University funds in DAI for ETH using Uniswap
-    /// @dev The logic for controlling slippage and price should be taken care by the Funds Manager
-    /// @param amount amount of DAI to trade, in decimals
-    /// @param deadline timestamps to keep the transaction valid before reverting 
-    function swapDAI_ETH(
-        uint256 amount,
-        uint256 deadline
-    ) public override returns (uint[] memory amounts) {
-        require(
-            hasRole(FUNDS_MANAGER_ROLE, _msgSender()),
-            "University: caller doesn't have FUNDS_MANAGER_ROLE"
-        );
-        require(
-            _uniswapWETH != address(0),
-            "University: setup uniswap first"
-        );
-        amounts = swapBlind(_uniswapDAI, _uniswapWETH, amount, deadline);
-    }
-
-    /// @notice Allow a Funds Manager to swap University funds in ETH for DAI using Uniswap
-    /// @dev The logic for controlling slippage and price should be taken care by the Funds Manager
-    /// @param amount amount of ETH to trade, in decimals of WETH
-    /// @param deadline timestamps to keep the transaction valid before reverting 
-    function swapETH_DAI(
-        uint256 amount,
-        uint256 deadline
-    ) public override returns (uint[] memory amounts) {
-        require(
-            hasRole(FUNDS_MANAGER_ROLE, _msgSender()),
-            "University: caller doesn't have FUNDS_MANAGER_ROLE"
-        );
-        require(
-            _uniswapWETH != address(0),
-            "University: setup uniswap first"
-        );
-        amounts = swapBlind(_uniswapWETH, _uniswapDAI, amount, deadline);
-    }
-
-    function swapBlind(
-        address tokenA,
-        address tokenB,
-        uint256 amount,
-        uint256 deadline
-    ) internal returns (uint[] memory amounts) {
-        TransferHelper.safeApprove(tokenA, address(_uniswapRouter), amount);
-        address[] memory path = new address[](2);
-        path[0] = tokenA;
-        path[1] = tokenB;
-        amounts = _uniswapRouter.swapExactTokensForTokens(
-            amount,
-            0,
-            path,
-            address(this),
-            deadline
-        );
     }
 }

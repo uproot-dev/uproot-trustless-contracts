@@ -1,17 +1,19 @@
-pragma solidity ^0.6.6;
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+pragma solidity ^0.6.11;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
-import "@uniswap/lib/contracts/libraries/TransferHelper.sol";
 import "./interface/IUniversity.sol";
 import "./interface/IStudent.sol";
 import "./interface/IClassroom.sol";
 import "./interface/IStudentApplication.sol";
 import "./interface/IStudentAnswer.sol";
 import "./interface/IClassroomChallenge.sol";
+import "./MyUtils.sol";
 
 
 contract StudentApplication is Ownable, IStudentApplication {

@@ -1,4 +1,6 @@
-pragma solidity ^0.6.6;
+
+// SPDX-License-Identifier: GPL-3.0-or-later
+pragma solidity ^0.6.11;
 
 
 interface IUniversityFund {
@@ -9,10 +11,6 @@ interface IUniversityFund {
     function grantRoleFund(bytes32, address) external;
 
     function revokeRoleFund(bytes32, address) external;
-
-    function swapDAI_ETH(uint256, uint256) external returns (uint256[] memory);
-
-    function swapETH_DAI(uint256, uint256) external returns (uint256[] memory);
 
     function applyFundsCompound(uint256) external;
 
@@ -26,7 +24,17 @@ interface IUniversityFund {
 
     function recoverFundsAave(uint256) external;
 
+    function setAaveMarketCollateralForDAI(bool) external;
+
     function setAaveMarketCollateral(address, bool) external;
+
+    function enterCompoundDAIMarket() external;
+
+    function enterCompoundMarket(address) external;
+
+    function exitCompoundDAIMarket() external;
+
+    function exitCompoundMarket(address) external;
 
     function getCompoundLiquidityAndShortfall()
         external
@@ -48,14 +56,4 @@ interface IUniversityFund {
     function aaveRepayBorrow(address, uint256) external;
 
     function aaveSwapBorrowRateMode(address) external;
-
-    function setAaveMarketCollateralForDAI(bool) external;
-
-    function enterCompoundDAIMarket() external;
-
-    function enterCompoundMarket(address) external;
-
-    function exitCompoundDAIMarket() external;
-
-    function exitCompoundMarket(address) external;
 }
