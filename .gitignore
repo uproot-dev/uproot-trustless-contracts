@@ -348,3 +348,15 @@ MigrationBackup/
 
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
+
+# Added
+node_modules
+build/**
+bin/**
+artifacts/**
+cache/**
+package-lock.json
+yarn.lock
+package-lock.json
+truffle-config.js
+
