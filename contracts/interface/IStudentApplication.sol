@@ -18,11 +18,11 @@ interface IStudentApplication {
 
     function withdrawAllResults(address) external;
 
-    function refundPayment(address to) external;
+    function refundPayment(address) external;
     
-    function withdraw(address to, uint256 val) external;
+    function withdraw(address, uint256) external;
 
-    function payEntryPrice() external;
+    function payEntryPrice(bool) external;
 
     function activate() external;
 

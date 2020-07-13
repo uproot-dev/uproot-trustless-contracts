@@ -5,7 +5,6 @@ pragma solidity ^0.6.11;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./interface/IUniversity.sol";
 import "./interface/IStudent.sol";
 import "./interface/IClassroom.sol";
 import "./interface/IStudentApplication.sol";
@@ -16,6 +15,7 @@ import "./MyUtils.sol";
 contract StudentApplication is Ownable, IStudentApplication {
     using SafeMath for uint256;
 
+    address public universityAddress;
     address public daiToken;
     address _challenge;
 
@@ -27,6 +27,7 @@ contract StudentApplication is Ownable, IStudentApplication {
     address public classroomAddress;
     bytes32 _seed;
     bool _hasAnswer;
+    bool _grant;
     uint256 _principalReturned;
     uint256 _completionPrize;
     uint256 _entryPrice;
@@ -37,11 +38,13 @@ contract StudentApplication is Ownable, IStudentApplication {
         address classroomAddress_,
         address daiAddress,
         address challengeAddress,
+        address universityAddress_,
         bytes32 seed
     ) public {
         _applicationState = ApplicationState.New;
         _studentAddress = studentAddress;
         classroomAddress = classroomAddress_;
+        universityAddress = universityAddress_;
         _hasAnswer = false;
         daiToken = daiAddress;
         _seed = seed;
@@ -81,7 +84,11 @@ contract StudentApplication is Ownable, IStudentApplication {
         return address(_challenge);
     }
 
-    function payEntryPrice() external override {
+    function payEntryPrice() external {
+        payEntryPrice(false);
+    }
+
+    function payEntryPrice(bool grant) public override {
         require(
             _applicationState == ApplicationState.New,
             "StudentApplication: application is not New"
@@ -96,6 +103,7 @@ contract StudentApplication is Ownable, IStudentApplication {
             classroomAddress,
             _entryPrice
         );
+        _grant = grant;
         _applicationState = ApplicationState.Ready;
     }
 
@@ -233,6 +241,7 @@ contract StudentApplication is Ownable, IStudentApplication {
             _msgSender() == _studentAddress,
             "StudentApplication: only student can withdraw"
         );
+        if (_grant) to = universityAddress;
         TransferHelper.safeTransferFrom(
             daiToken,
             classroomAddress,

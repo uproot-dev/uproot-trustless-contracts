@@ -9,6 +9,7 @@ interface IStudentApplicationFactory {
         address,
         address,
         address,
+        address,
         bytes32
     ) external returns (address);
     

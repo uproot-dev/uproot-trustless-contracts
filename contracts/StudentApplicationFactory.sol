@@ -12,6 +12,7 @@ contract StudentApplicationFactory is IStudentApplicationFactory {
         address classroomAddress,
         address daiAddress,
         address challengeAddress,
+        address universityAddress,
         bytes32 seed
     ) public override returns (address studentApplicationAddress) {
         StudentApplication studentApplication = new StudentApplication(
@@ -19,6 +20,7 @@ contract StudentApplicationFactory is IStudentApplicationFactory {
             classroomAddress,
             daiAddress,
             challengeAddress,
+            universityAddress,
             seed
         );
         studentApplication.transferOwnership(msg.sender);

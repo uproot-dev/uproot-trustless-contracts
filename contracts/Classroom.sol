@@ -238,8 +238,9 @@ contract Classroom is Ownable, IClassroom {
             .newStudentApplication(
             student,
             address(this),
-            address(daiToken),
+            daiToken,
             challengeAddress,
+            address(university),
             generateNewSeed()
         );
         _studentApplicationsLink[student] = newApplication;
