@@ -701,7 +701,7 @@ contract University is Ownable, AccessControl, IUniversity {
             availableFunds() >= price,
             "University: not enough available funds"
         );
-        IStudentApplication(studentApplication).payEntryPrice();
+        IStudentApplication(studentApplication).payEntryPrice(true);
     }
 
     /// @notice Allow a Funds Manager to redirect surplus funds from liquidated positions to the endowment locked value. Irreversible
