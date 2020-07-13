@@ -3,10 +3,8 @@
 pragma solidity ^0.6.11;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
 import "./interface/IUniversity.sol";
 import "./interface/IStudent.sol";
 import "./interface/IClassroom.sol";
@@ -15,12 +13,11 @@ import "./interface/IStudentAnswer.sol";
 import "./interface/IClassroomChallenge.sol";
 import "./MyUtils.sol";
 
-
 contract StudentApplication is Ownable, IStudentApplication {
     using SafeMath for uint256;
 
-    IERC20 public daiToken;
-    IClassroomChallenge _challenge;
+    address public daiToken;
+    address _challenge;
 
     enum ApplicationState {New, Ready, Active, Success, Failed, Empty, Expired}
 
@@ -46,13 +43,13 @@ contract StudentApplication is Ownable, IStudentApplication {
         _studentAddress = studentAddress;
         classroomAddress = classroomAddress_;
         _hasAnswer = false;
-        daiToken = IERC20(daiAddress);
+        daiToken = daiAddress;
         _seed = seed;
-        _challenge = IClassroomChallenge(challengeAddress);
+        _challenge = challengeAddress;
         _entryPrice = IClassroom(classroomAddress).entryPrice();
     }
 
-    function studentAddress() public view override returns (address) {
+    function studentAddress() public override view returns (address) {
         require(
             _msgSender() == _studentAddress || _msgSender() == owner(),
             "StudentApplication: read permission denied"
@@ -60,7 +57,7 @@ contract StudentApplication is Ownable, IStudentApplication {
         return _studentAddress;
     }
 
-    function applicationState() public view override returns (uint256) {
+    function applicationState() public override view returns (uint256) {
         require(
             _msgSender() == _studentAddress || _msgSender() == owner(),
             "StudentApplication: read permission denied"
@@ -68,7 +65,7 @@ contract StudentApplication is Ownable, IStudentApplication {
         return uint256(_applicationState);
     }
 
-    function entryPrice() public view override returns (uint256) {
+    function entryPrice() public override view returns (uint256) {
         require(
             _msgSender() == _studentAddress || _msgSender() == owner(),
             "StudentApplication: read permission denied"
@@ -90,11 +87,11 @@ contract StudentApplication is Ownable, IStudentApplication {
             "StudentApplication: application is not New"
         );
         require(
-            daiToken.balanceOf(_msgSender()) >= _entryPrice,
+            IERC20(daiToken).balanceOf(_msgSender()) >= _entryPrice,
             "StudentApplication: sender can't pay the entry price"
         );
         TransferHelper.safeTransferFrom(
-            address(daiToken),
+            daiToken,
             _msgSender(),
             classroomAddress,
             _entryPrice
@@ -135,10 +132,7 @@ contract StudentApplication is Ownable, IStudentApplication {
             _answerSecret != bytes32(0),
             "StudentApplication: application secret not set"
         );
-        require(
-            secret == _answerSecret, 
-            "StudentApplication: wrong secret"
-        );
+        require(secret == _answerSecret, "StudentApplication: wrong secret");
         require(
             _applicationState == ApplicationState.Active,
             "StudentApplication: application is not active"
@@ -152,25 +146,30 @@ contract StudentApplication is Ownable, IStudentApplication {
         _hasAnswer = true;
     }
 
-    function viewChallengeMaterial() public view override returns (string memory) {
+    function viewChallengeMaterial()
+        public
+        override
+        view
+        returns (string memory)
+    {
         require(
             _msgSender() == _studentAddress || _msgSender() == owner(),
             "StudentApplication: read permission denied"
         );
-        return _challenge.viewMaterial();
+        return IClassroomChallenge(_challenge).viewMaterial();
     }
 
-    function getHint(uint256 index) public view override returns (bytes32) {
+    function getHint(uint256 index) public override view returns (bytes32) {
         require(_hasAnswer, "StudentApplication: answer not registered");
         require(
             _msgSender() == address(_answer),
             "StudentApplication: are you cheating?"
         );
         require(
-            index < _challenge.hintsCount(),
+            index < IClassroomChallenge(_challenge).hintsCount(),
             "StudentApplication: hint not available"
         );
-        return _challenge.getHint(index, _seed);
+        return IClassroomChallenge(_challenge).getHint(index, _seed);
     }
 
     function verifyAnswer() public view returns (bool) {
@@ -205,7 +204,8 @@ contract StudentApplication is Ownable, IStudentApplication {
 
     function viewPrincipalReturned() public view returns (uint256) {
         require(
-            _msgSender() == _studentAddress || _msgSender() == IStudent(_studentAddress).ownerStudent(),
+            _msgSender() == _studentAddress ||
+                _msgSender() == IStudent(_studentAddress).ownerStudent(),
             "StudentApplication: read permission denied"
         );
         return _principalReturned;
@@ -213,17 +213,36 @@ contract StudentApplication is Ownable, IStudentApplication {
 
     function viewPrizeReturned() public view returns (uint256) {
         require(
-            _msgSender() == _studentAddress || _msgSender() == IStudent(_studentAddress).ownerStudent(),
+            _msgSender() == _studentAddress ||
+                _msgSender() == IStudent(_studentAddress).ownerStudent(),
             "StudentApplication: read permission denied"
         );
         return _completionPrize;
     }
 
     function withdrawAllResults(address to) public override {
-        withdrawResults(to, _principalReturned + _completionPrize);
+        withdraw(to, _principalReturned + _completionPrize);
     }
 
-    function withdrawResults(address to, uint256 val) public override {
+    function refundPayment(address to) public override {
+        require(
+            _applicationState == ApplicationState.Ready,
+            "StudentApplication: refund not available"
+        );
+        require(
+            _msgSender() == _studentAddress,
+            "StudentApplication: only student can withdraw"
+        );
+        TransferHelper.safeTransferFrom(
+            daiToken,
+            classroomAddress,
+            to,
+            _entryPrice
+        );
+        _applicationState = ApplicationState.New;
+    }
+
+    function withdraw(address to, uint256 val) public override {
         require(
             _msgSender() == _studentAddress,
             "StudentApplication: only student can withdraw"
@@ -232,6 +251,6 @@ contract StudentApplication is Ownable, IStudentApplication {
             applicationState() > 2,
             "StudentApplication: application not finished"
         );
-        TransferHelper.safeTransfer(address(daiToken), to, val);
+        TransferHelper.safeTransfer(daiToken, to, val);
     }
 }

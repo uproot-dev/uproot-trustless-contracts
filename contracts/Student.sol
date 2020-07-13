@@ -4,16 +4,13 @@ pragma solidity ^0.6.11;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
 import "@nomiclabs/buidler/console.sol";
+//import "@nomiclabs/buidler/console.sol";
 import "./interface/IStudent.sol";
 import "./interface/IClassroom.sol";
 import "./interface/IUniversity.sol";
 import "./interface/IStudentApplication.sol";
 import "./interface/IGrantsManager.sol";
-import "./MyUtils.sol";
-
 
 contract Student is Ownable, AccessControl, IStudent {
     using SafeMath for uint256;
@@ -27,8 +24,6 @@ contract Student is Ownable, AccessControl, IStudent {
     IUniversity public university;
     address[] public classroomAddresses;
     int32 _score;
-
-    IERC20 public daiToken;
 
     constructor(bytes32 _name, address payable universityAddress) public {
         name = _name;
@@ -45,7 +40,7 @@ contract Student is Ownable, AccessControl, IStudent {
 
     event LogChangeName(bytes32);
 
-    function ownerStudent() public view override returns (address) {
+    function ownerStudent() public override view returns (address) {
         return owner();
     }
 
@@ -59,7 +54,7 @@ contract Student is Ownable, AccessControl, IStudent {
         emit LogChangeName(name);
     }
 
-    function score() public view override returns (int32) {
+    function score() public override view returns (int32) {
         require(
             hasRole(READ_SCORE_ROLE, _msgSender()),
             "Student: caller doesn't have READ_SCORE_ROLE"
@@ -141,12 +136,11 @@ contract Student is Ownable, AccessControl, IStudent {
         return IStudentApplication(app).applicationState();
     }
 
-    // not a feature but it is something a teacher would sometimes want to do
-    function removeFromMyClassroom() public {
-        for (uint256 i = 0; i < classroomAddresses.length; i++) {
-            if (classroomAddresses[i] == _msgSender())
-                classroomAddresses[i] = address(0);
-        }
+    function refundApplicationFromClassroom(address classroom, address to)
+        public
+        onlyOwner
+    {
+        refundApplication(IClassroom(classroom).viewMyApplication(), to);
     }
 
     function withdrawAllResultsFromClassroom(address classroom, address to)
@@ -171,6 +165,13 @@ contract Student is Ownable, AccessControl, IStudent {
         );
     }
 
+    function refundApplication(address application, address to)
+        public
+        onlyOwner
+    {
+        IStudentApplication(application).refundPayment(to);
+    }
+
     function withdrawAllResultsFromApplication(address application, address to)
         public
         onlyOwner
@@ -183,29 +184,7 @@ contract Student is Ownable, AccessControl, IStudent {
         address to,
         uint256 val
     ) public onlyOwner {
-        IStudentApplication(application).withdrawResults(to, val);
-    }
-
-    function requestClassroom(
-        address applicationAddr,
-        bytes32 cName,
-        uint24 cCut,
-        uint24 cPCut,
-        int32 minScore,
-        uint256 entryPrice,
-        uint256 duration,
-        address challenge
-    ) public onlyOwner {
-        university.studentRequestClassroom(
-            applicationAddr,
-            cName,
-            cCut,
-            cPCut,
-            minScore,
-            entryPrice,
-            duration,
-            challenge
-        );
+        IStudentApplication(application).withdraw(to, val);
     }
 
     function requestGrant(address grantsManager, address studentApplication)
@@ -213,7 +192,8 @@ contract Student is Ownable, AccessControl, IStudent {
         onlyOwner
     {
         require(
-            IStudentApplication(studentApplication).studentAddress() == address(this),
+            IStudentApplication(studentApplication).studentAddress() ==
+                address(this),
             "Student: wrong application address"
         );
         uint256 price = IStudentApplication(studentApplication).entryPrice();

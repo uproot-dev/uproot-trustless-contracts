@@ -1,7 +1,5 @@
-const Build_DAI_ERC20 = require("../build/contracts/ERC20.json");
+const Build_DAI_ERC20 = require("../build/contracts/IERC20.json");
 const Build_DAI_CERC20 = require("../build/contracts/CERC20.json");
-const Build_LINK = require("../build/contracts/LinkTokenInterface.json");
-const Build_RelayHub = require("../build/contracts/BaseRelayRecipient.json");
 const Build_ClassroomFactory = require("../build/contracts/ClassroomFactory.json");
 const Build_Classroom = require("../build/contracts/Classroom.json");
 const Build_StudentFactory = require("../build/contracts/StudentFactory.json");
@@ -55,9 +53,6 @@ const oracleTimestamp = "0xD115BFFAbbdd893A6f7ceA402e7338643Ced44a6";
 const requestIdTimestamp = ethers.utils.formatBytes32String("REQUESTNUMBER");
 const oraclePaymentTimestamp = ethers.utils.parseEther("1");
 const placeHolderAddress = "0xD115BFFAbbdd893A6f7ceA402e7338643Ced44a6"; //Random address
-const uniswapDAI = "0xD115BFFAbbdd893A6f7ceA402e7338643Ced44a6";
-const uniswapLINK = "0xD115BFFAbbdd893A6f7ceA402e7338643Ced44a6";
-const uniswapRouter = "0xD115BFFAbbdd893A6f7ceA402e7338643Ced44a6";
 const ensContractAddress = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e"; //same on every network
 const ensTestRegistrarAddress = "0x09B5bd82f3351A4c8437FC6D7772A9E6cd5D25A1";
 const ensPublicResolverAddress = "0x42D63ae25990889E35F215bC95884039Ba354115";
@@ -66,12 +61,10 @@ const ensReverseResolverAddres = "0x6F628b68b30Dc3c17f345c9dbBb1E483c2b7aE5c";
 describe("Grant process checks", function() {
     var DAI_ERC20,
         DAI_CERC20,
-        LINK,
         AaveProvider,
         AaveLendingPool,
         AaveLendingPoolCore,
         DAI_Aave,
-        RelayHub,
         ClassroomFactory,
         StudentFactory,
         StudentApplicationFactory,
@@ -96,8 +89,6 @@ describe("Grant process checks", function() {
                 "CDAI",
                 "CDAI",
             ]);
-            LINK = await deployMock(ownerAddress, Build_LINK, ["LINK", "LINK"]);
-            RelayHub = await deployMock(ownerAddress, Build_RelayHub);
             ClassroomFactory = await deployContract(
                 ownerAddress,
                 Build_ClassroomFactory, []
@@ -112,7 +103,6 @@ describe("Grant process checks", function() {
                 cut,
                 DAI_ERC20.address,
                 DAI_CERC20.address,
-                RelayHub.address,
                 ClassroomFactory.address,
                 StudentFactory.address,
                 StudentApplicationFactory.address,
@@ -195,22 +185,6 @@ describe("Grant process checks", function() {
                 ethers.provider
             );
             await Classroom.deployed();
-            await LINK.mock.balanceOf.returns(ethers.utils.parseEther("1000000"));
-            await Classroom.connect(teacher1).configureOracles(
-                oracleRandom,
-                requestIdRandom,
-                oraclePaymentRandom,
-                oracleTimestamp,
-                requestIdTimestamp,
-                oraclePaymentTimestamp,
-                LINK.address,
-                false
-            );
-            await Classroom.connect(teacher1).configureUniswap(
-                uniswapDAI,
-                uniswapLINK,
-                uniswapRouter
-            );
             await AaveProvider.mock.getLendingPoolCore.returns(
                 AaveLendingPoolCore.address
             );
@@ -220,6 +194,7 @@ describe("Grant process checks", function() {
             );
             await Classroom.connect(teacher1).configureAave(AaveProvider.address);
             await Classroom.connect(teacher1).openApplications();
+            DAI_ERC20.mock.approve.returns(true);
             await Student1.connect(student1).applyToClassroom(Classroom.address);
         });
     });

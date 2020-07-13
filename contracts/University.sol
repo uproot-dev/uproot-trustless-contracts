@@ -48,7 +48,8 @@ contract University is Ownable, AccessControl, IUniversity {
     /// UNIVERSITY_OVERSEER_ROLE can inspect Grant Managers and Fund Managers, and present cases for funders to vote upon
     bytes32 public constant UNIVERSITY_OVERSEER_ROLE = keccak256(
         "UNIVERSITY_OVERSEER_ROLE"
-    );/// REGISTERED_SUPPLIER_ROLE can receive transactions to consume the operational budget
+    );
+    /// REGISTERED_SUPPLIER_ROLE can receive transactions to consume the operational budget
     bytes32 public constant REGISTERED_SUPPLIER_ROLE = keccak256(
         "REGISTERED_SUPPLIER_ROLE"
     );
@@ -57,14 +58,12 @@ contract University is Ownable, AccessControl, IUniversity {
     bytes32 public override name;
     // Parameter: University cut from professor (Parts per Million)
     uint24 public override cut;
-    // Parameter: GSN funds to give students
-    uint256 _studentGSNDeposit;
     // List of every registered classroom
-    address[] _classList;
+    address[] public classList;
     // Mapping of each student's applications
     mapping(address => address[]) _studentApplicationsMapping;
     // Mapping of each student(owner) to student(smart contract)
-    mapping(address => address) _ownerToStudent;
+    mapping(address => address) public ownerToStudent;
     // Mapping of every donor and donations
     mapping(address => uint256) public donators;
     // Total amount of donations received so far
@@ -91,7 +90,7 @@ contract University is Ownable, AccessControl, IUniversity {
 
     //ENS
     address public ensContract;
-    address public ensTestRegistrar; //change on prod
+    address public ensRegistrar;
     address public ensPublicResolver;
     address public ensReverseRegistrar;
 
@@ -112,13 +111,12 @@ contract University is Ownable, AccessControl, IUniversity {
         address studentFactoryAddress,
         address studentApplicationFactoryAddress,
         address ensContractAddress,
-        address ensTestRegistrarAddress,
+        address ensRegistrarAddress,
         address ensPublicResolverAddress,
         address ensReverseRegistrarAddress
     ) public {
         name = name_;
         cut = cut_;
-        _studentGSNDeposit = 1e15;
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
         grantRole(CLASSLIST_ADMIN_ROLE, _msgSender());
         daiToken = daiAddress;
@@ -127,7 +125,7 @@ contract University is Ownable, AccessControl, IUniversity {
         studentFactory = studentFactoryAddress;
         studentApplicationFactory = studentApplicationFactoryAddress;
         ensContract = ensContractAddress;
-        ensTestRegistrar = ensTestRegistrarAddress;
+        ensRegistrar = ensRegistrarAddress;
         ensPublicResolver = ensPublicResolverAddress;
         ensReverseRegistrar = ensReverseRegistrarAddress;
     }
@@ -164,9 +162,9 @@ contract University is Ownable, AccessControl, IUniversity {
     /// @param classroomFactoryAddress Address of contract in the network
     /// @param studentFactoryAddress Address of contract in the network
     /// @param studentApplicationFactoryAddress Address of contract in the network
-    /// @param ensTestRegistrarAddress Address of contract in the network    
+    /// @param ensRegistrarAddress Address of contract in the network
     /// @param ensPublicResolverAddress Address of contract in the network
-    /// @param ensReverseRegistrarAddress Address of contract in the network    
+    /// @param ensReverseRegistrarAddress Address of contract in the network
     function updateAddresses(
         address daiAddress,
         address compoundDai,
@@ -174,18 +172,34 @@ contract University is Ownable, AccessControl, IUniversity {
         address studentFactoryAddress,
         address studentApplicationFactoryAddress,
         address ensContractAddress,
-        address ensTestRegistrarAddress,
+        address ensRegistrarAddress,
         address ensPublicResolverAddress,
-        address ensReverseRegistrarAddress) public onlyOwner{
+        address ensReverseRegistrarAddress
+    ) public onlyOwner {
         daiToken = daiAddress == address(0) ? daiToken : daiAddress;
         cDAI = compoundDai == address(0) ? cDAI : compoundDai;
-        classroomFactory = classroomFactoryAddress == address(0) ? classroomFactory : classroomFactoryAddress;
-        studentFactory = studentFactoryAddress == address(0) ? studentFactory : studentFactoryAddress;
-        studentApplicationFactory = studentApplicationFactoryAddress == address(0) ? studentApplicationFactory : studentApplicationFactoryAddress;
-        ensContract = ensContractAddress == address(0) ? ensContract : ensContractAddress;
-        ensTestRegistrar = ensTestRegistrarAddress == address(0) ? ensTestRegistrar : ensTestRegistrarAddress;
-        ensPublicResolver = ensPublicResolverAddress == address(0) ? ensPublicResolver : ensPublicResolverAddress;
-        ensReverseRegistrar = ensReverseRegistrarAddress == address(0) ? ensReverseRegistrar : ensReverseRegistrarAddress;
+        classroomFactory = classroomFactoryAddress == address(0)
+            ? classroomFactory
+            : classroomFactoryAddress;
+        studentFactory = studentFactoryAddress == address(0)
+            ? studentFactory
+            : studentFactoryAddress;
+        studentApplicationFactory = studentApplicationFactoryAddress ==
+            address(0)
+            ? studentApplicationFactory
+            : studentApplicationFactoryAddress;
+        ensContract = ensContractAddress == address(0)
+            ? ensContract
+            : ensContractAddress;
+        ensRegistrar = ensRegistrarAddress == address(0)
+            ? ensRegistrar
+            : ensRegistrarAddress;
+        ensPublicResolver = ensPublicResolverAddress == address(0)
+            ? ensPublicResolver
+            : ensPublicResolverAddress;
+        ensReverseRegistrar = ensReverseRegistrarAddress == address(0)
+            ? ensReverseRegistrar
+            : ensReverseRegistrarAddress;
     }
 
     // Parameters setup
@@ -199,7 +213,7 @@ contract University is Ownable, AccessControl, IUniversity {
         );
         universityFund = addr;
     }
-    
+
     /// @notice Change the name of the University
     /// @param val New value
     function changeName(bytes32 val) public onlyOwner {
@@ -214,16 +228,13 @@ contract University is Ownable, AccessControl, IUniversity {
         emit LogChangeCut(cut);
     }
 
-    /// @notice Change the value of ETH deposited in students relay hub
-    /// @param val New value, in WEI
-    function changeStudentGSNDeposit(uint256 val) public onlyOwner {
-        _studentGSNDeposit = val;
-    }
-
     // ENS operations
 
-    function registerInRegistrar(bytes32 label, address _owner) public onlyOwner {
-        IRegistrar(ensTestRegistrar).register(label, _owner);
+    function registerInRegistrar(bytes32 label, address _owner)
+        public
+        onlyOwner
+    {
+        IRegistrar(ensRegistrar).register(label, _owner);
     }
 
     function registerInReverseRegistrar(string memory _name) public onlyOwner {
@@ -238,53 +249,83 @@ contract University is Ownable, AccessControl, IUniversity {
         setAddressInResolver(node, val, ensPublicResolver);
     }
 
-    function setAddressInResolver(bytes32 node, address val, address resolver) public onlyOwner {
+    function setAddressInResolver(
+        bytes32 node,
+        address val,
+        address resolver
+    ) public onlyOwner {
         IResolver(resolver).setAddr(node, val);
     }
 
-    function setTextInResolver(bytes32 node, string memory key, string memory val) public onlyOwner {
+    function setTextInResolver(
+        bytes32 node,
+        string memory key,
+        string memory val
+    ) public onlyOwner {
         setTextInResolver(node, key, val, ensPublicResolver);
     }
 
-    function setTextInResolver(bytes32 node, string memory key, string memory val, address resolver) public onlyOwner {
+    function setTextInResolver(
+        bytes32 node,
+        string memory key,
+        string memory val,
+        address resolver
+    ) public onlyOwner {
         IResolver(resolver).setText(node, key, val);
     }
 
-    function setSubnodeRecord(bytes32 node, bytes32 label, address owner, address resolver, uint64 ttl) public onlyOwner {
+    function setSubnodeRecord(
+        bytes32 node,
+        bytes32 label,
+        address owner,
+        address resolver,
+        uint64 ttl
+    ) public onlyOwner {
         IENS(ensContract).setSubnodeRecord(node, label, owner, resolver, ttl);
     }
 
-    function claimSubnodeClassroom(bytes32 node, bytes32 label, address owner, address resolver, uint64 ttl, address classroom) public {
-        require(
-            owner == _msgSender(),
-            "University: delegated claim not allowed"
-        );
+    function claimSubnodeClassroom(
+        bytes32 node,
+        bytes32 label,
+        address resolver,
+        uint64 ttl,
+        address classroom
+    ) public {
         require(
             IClassroom(classroom).ownerClassroom() == _msgSender(),
             "University: caller is not owner of this classroom"
         );
+        address owner = _msgSender();
         setSubnodeRecord(node, label, owner, resolver, ttl);
     }
 
-    function claimSubnodeStudent(bytes32 node, bytes32 label, address owner, address resolver, uint64 ttl, address student) public {
-        require(
-            owner == _msgSender(),
-            "University: delegated claim not allowed"
-        );
+    function claimSubnodeStudent(
+        bytes32 node,
+        bytes32 label,
+        address resolver,
+        uint64 ttl,
+        address student
+    ) public {
         require(
             IStudent(student).ownerStudent() == _msgSender(),
             "University: caller is not owner of this student registry"
         );
+        address owner = _msgSender();
         setSubnodeRecord(node, label, owner, resolver, ttl);
     }
-    
+
     // Contract Logic
 
-    // Public view functions 
+    // Public view functions
 
     /// @return the ammount of DAI able for investing
     /// @dev ETH is not considered as part of investment funds
-    function availableFundsForInvestment() public view override returns (uint256) {
+    function availableFundsForInvestment()
+        public
+        override
+        view
+        returns (uint256)
+    {
         uint256 funds = IERC20(daiToken).balanceOf(address(this));
         if (funds < operationalBudget) return 0;
         return funds.sub(operationalBudget);
@@ -292,38 +333,57 @@ contract University is Ownable, AccessControl, IUniversity {
 
     /// @return the ammount of DAI able for giving grants
     /// @dev ETH is not considered as part of funds
-    function availableFunds() public view override returns (uint256) {
+    function availableFunds() public override view returns (uint256) {
         uint256 funds = IERC20(daiToken).balanceOf(address(this));
         if (funds < endowmentLocked.add(operationalBudget)) return 0;
         return funds.sub(endowmentLocked).sub(operationalBudget);
     }
 
-    /// @return true if the classroom is registered in this University 
-    function isValidClassroom(address classroom) public view override returns (bool) {
+    /// @return true if the classroom is registered in this University
+    function isValidClassroom(address classroom)
+        public
+        override
+        view
+        returns (bool)
+    {
         return hasRole(CLASSROOM_PROFESSOR_ROLE, classroom);
     }
 
-    /// @return true if the student is registered in this University 
-    function studentIsRegistered(address student) public view override returns (bool) {
+    /// @return true if the student is registered in this University
+    function studentIsRegistered(address student)
+        public
+        override
+        view
+        returns (bool)
+    {
         return hasRole(STUDENT_IDENTITY_ROLE, student);
     }
 
     /// @return address of this student
     function myStudentAddress() public view returns (address) {
         require(
-            _ownerToStudent[_msgSender()] != address(0),
+            ownerToStudent[_msgSender()] != address(0),
             "University: caller doesn't have a student registry"
         );
-        return _ownerToStudent[_msgSender()];
+        return ownerToStudent[_msgSender()];
     }
 
     /// @return the address of the application of a Student
-    function viewMyApplications() public view override returns (address[] memory) {
+    function viewMyApplications()
+        public
+        override
+        view
+        returns (address[] memory)
+    {
         return viewStudentApplications(_msgSender());
     }
 
     /// @return the address of the application of a Student, called from the owner
-    function viewMyStudentApplications(address student) public view returns (address[] memory) {
+    function viewMyStudentApplications(address student)
+        public
+        view
+        returns (address[] memory)
+    {
         require(
             IStudent(student).ownerStudent() == _msgSender(),
             "University: invalid student address"
@@ -335,8 +395,8 @@ contract University is Ownable, AccessControl, IUniversity {
     /// @return the addresses of the applications of a the supplied address
     function viewStudentApplications(address addr)
         public
-        view
         override
+        view
         returns (address[] memory)
     {
         require(
@@ -356,13 +416,17 @@ contract University is Ownable, AccessControl, IUniversity {
 
     function _newStudent(bytes32 sName, address caller)
         internal
-        returns (address) {
+        returns (address)
+    {
         require(
-            _ownerToStudent[caller] == address(0),
+            ownerToStudent[caller] == address(0),
             "University: student already registered"
         );
-        address student = IStudentFactory(studentFactory).newStudent(sName, address(this));
-        _ownerToStudent[caller] = student;
+        address student = IStudentFactory(studentFactory).newStudent(
+            sName,
+            address(this)
+        );
+        ownerToStudent[caller] = student;
         IStudent(student).transferOwnershipStudent(caller);
         _setupRole(STUDENT_IDENTITY_ROLE, student);
         emit LogNewStudent(name, student);
@@ -425,7 +489,7 @@ contract University is Ownable, AccessControl, IUniversity {
             minScore,
             entryPrice,
             duration,
-            payable (address(this)),
+            payable(address(this)),
             challengeAddress,
             daiToken,
             cDAI,
@@ -433,65 +497,18 @@ contract University is Ownable, AccessControl, IUniversity {
         );
         IClassroom(classroom).transferOwnershipClassroom(owner);
         address classroomAddr = address(classroom);
-        _classList.push(classroomAddr);
+        classList.push(classroomAddr);
         _setupRole(CLASSROOM_PROFESSOR_ROLE, classroomAddr);
         emit LogNewClassroom(cName, classroomAddr);
         return classroomAddr;
     }
 
-    /// @notice Register function where an Student can can create an instance of a Classroom in this University, upon being successful in any classroom
-    /// @param applicationAddr Address of the successful application
-    /// @param cName Name this classroom
-    /// @param cCut Cut of the principal amount deposited that is charged from students, in PPM
-    /// @param cPCut Cut of the pooled returns from successful students, in PPM
-    /// @param minScore Minimum score value required from students to be able to apply in this classroom
-    /// @param entryPrice Required deposit to be applied as principal an locked for the duration of the course, in decimal units of DAI
-    /// @param duration Lock time between course opening and closing, in Timestamp
-    /// @param challenge Address to the challenge to be solved in this Classroom's courses
-    /// @return the smart contract address for this Classroom instance in this University
-    function studentRequestClassroom(
-        address applicationAddr,
-        bytes32 cName,
-        uint24 cCut,
-        uint24 cPCut,
-        int32 minScore,
-        uint256 entryPrice,
-        uint256 duration,
-        address challenge
-    ) public override returns (address) {
-        require(
-            hasRole(STUDENT_IDENTITY_ROLE, _msgSender()),
-            "University: caller doesn't have STUDENT_IDENTITY_ROLE"
-        );
-        require(
-            checkForStudentApplication(_msgSender(), applicationAddr),
-            "University: caller is not student of this application"
-        );
-        IStudentApplication application = IStudentApplication(applicationAddr);
-        require(
-            application.applicationState() == 3,
-            "University: application is not successful"
-        );
-        return
-            _newClassRoom(
-                IStudent(_msgSender()).ownerStudent(),
-                cName,
-                cCut,
-                cPCut,
-                minScore,
-                entryPrice,
-                duration,
-                challenge
-            );
-    }
-
     /// @notice Register and map a Student's application to this Student
     /// @param student Address of the Student
     /// @param application Address of the application
-    function registerStudentApplication(
-        address student,
-        address application
-    ) public override
+    function registerStudentApplication(address student, address application)
+        public
+        override
     {
         require(
             hasRole(CLASSROOM_PROFESSOR_ROLE, _msgSender()),
@@ -545,7 +562,7 @@ contract University is Ownable, AccessControl, IUniversity {
         IStudent(student).subScore(val);
     }
 
-    // Funds asset value management 
+    // Funds asset value management
 
     /// @notice Allow managing the university Funds. Must be called from an appointed Funds Manager
     function applyFunds(uint256 val) public override {
@@ -557,20 +574,14 @@ contract University is Ownable, AccessControl, IUniversity {
             availableFundsForInvestment() >= val,
             "University: not enough funds to invest"
         );
-        require(
-            universityFund != address(0),
-            "University: attach fund first"
-        );
+        require(universityFund != address(0), "University: attach fund first");
         TransferHelper.safeTransfer(address(daiToken), universityFund, val);
     }
 
     /// @notice Get the ammount of DAI applied in Fund
     /// @return ammount of DAI applied in Fund
     function appliedFunds() public view returns (uint256) {
-        require(
-            universityFund != address(0),
-            "University: attach fund first"
-        );
+        require(universityFund != address(0), "University: attach fund first");
         return IERC20(daiToken).balanceOf(universityFund);
     }
 
@@ -580,11 +591,13 @@ contract University is Ownable, AccessControl, IUniversity {
             hasRole(FUNDS_MANAGER_ROLE, _msgSender()),
             "University: caller doesn't have FUNDS_MANAGER_ROLE"
         );
-        require(
-            universityFund != address(0),
-            "University: attach fund first"
+        require(universityFund != address(0), "University: attach fund first");
+        TransferHelper.safeTransferFrom(
+            address(daiToken),
+            universityFund,
+            address(this),
+            val
         );
-        TransferHelper.safeTransferFrom(address(daiToken), universityFund, address(this), val);
     }
 
     /// @notice Allow managing the university Funds. Must be called from an appointed Funds Manager
@@ -593,20 +606,14 @@ contract University is Ownable, AccessControl, IUniversity {
             hasRole(FUNDS_MANAGER_ROLE, _msgSender()),
             "University: caller doesn't have FUNDS_MANAGER_ROLE"
         );
-        require(
-            universityFund != address(0),
-            "University: attach fund first"
-        );
+        require(universityFund != address(0), "University: attach fund first");
         TransferHelper.safeTransferETH(universityFund, val);
     }
 
     /// @notice Get the ammount of ETH applied in Fund
     /// @return ammount of ETH applied in Fund
     function appliedFundsETH() public view returns (uint256) {
-        require(
-            universityFund != address(0),
-            "University: attach fund first"
-        );
+        require(universityFund != address(0), "University: attach fund first");
         return universityFund.balance;
     }
 
@@ -616,10 +623,7 @@ contract University is Ownable, AccessControl, IUniversity {
             hasRole(FUNDS_MANAGER_ROLE, _msgSender()),
             "University: caller doesn't have FUNDS_MANAGER_ROLE"
         );
-        require(
-            universityFund != address(0),
-            "University: attach fund first"
-        );
+        require(universityFund != address(0), "University: attach fund first");
         IUniversityFund(universityFund).withdraw(val);
     }
 
@@ -627,19 +631,13 @@ contract University is Ownable, AccessControl, IUniversity {
 
     /// @notice Grants role to account inside University Fund
     function grantRoleFund(bytes32 role, address account) public {
-        require(
-            universityFund != address(0),
-            "University: attach fund first"
-        );
+        require(universityFund != address(0), "University: attach fund first");
         IUniversityFund(universityFund).grantRoleFund(role, account);
     }
 
     /// @notice Revoke role from account inside University Fund
     function revokeRoleFund(bytes32 role, address account) public {
-        require(
-            universityFund != address(0),
-            "University: attach fund first"
-        );
+        require(universityFund != address(0), "University: attach fund first");
         IUniversityFund(universityFund).revokeRoleFund(role, account);
     }
 
@@ -648,10 +646,7 @@ contract University is Ownable, AccessControl, IUniversity {
     /// @notice Allow managing how much Funds Manager can draw from funds to cover operational expenses. Must be called from the university admin
     /// @param val Value to increase
     function increaseOperationalBudget(uint256 val) public onlyOwner {
-        require(
-            endowmentLocked >= val,
-            "University: not enough endowment"
-        );
+        require(endowmentLocked >= val, "University: not enough endowment");
         operationalBudget = operationalBudget.add(val);
         endowmentLocked = endowmentLocked.sub(val);
     }
@@ -694,7 +689,10 @@ contract University is Ownable, AccessControl, IUniversity {
     /// @notice Allow a Grants Manager to pay a Student's entry price for an application, if the appointed Grants Manager decide so
     /// @param studentApplication Address of the Student
     /// @param price Value of the application's entry price
-    function giveGrant(address studentApplication, uint256 price) public override {
+    function giveGrant(address studentApplication, uint256 price)
+        public
+        override
+    {
         require(
             hasRole(GRANTS_MANAGER_ROLE, _msgSender()),
             "University: caller doesn't have GRANTS_MANAGER_ROLE"
@@ -725,9 +723,10 @@ contract University is Ownable, AccessControl, IUniversity {
     /// @notice Allow an appointed Overseer to inspect all students that received grants by a specific Grants Manager
     /// @param grantsManager Address of the Grants Manager
     /// @return array of Students addresses
-    function viewAllStudentsFromGrantManager(
-            address grantsManager
-        ) public returns (address[] memory) {
+    function viewAllStudentsFromGrantManager(address grantsManager)
+        public
+        returns (address[] memory)
+    {
         require(
             hasRole(UNIVERSITY_OVERSEER_ROLE, _msgSender()),
             "University: caller doesn't have UNIVERSITY_OVERSEER_ROLE"
@@ -740,9 +739,9 @@ contract University is Ownable, AccessControl, IUniversity {
     /// @param grantsManager Address of the Grants Manager
     /// @return array of grant values
     function viewAllStudentGrantsFromGrantManager(
-            address student, 
-            address grantsManager
-        ) public returns (uint256[] memory) {
+        address student,
+        address grantsManager
+    ) public returns (uint256[] memory) {
         require(
             hasRole(UNIVERSITY_OVERSEER_ROLE, _msgSender()),
             "University: caller doesn't have UNIVERSITY_OVERSEER_ROLE"
@@ -770,7 +769,7 @@ contract University is Ownable, AccessControl, IUniversity {
         donators[sender] = donators[sender].add(donation);
         LogDonation(_msgSender(), donation);
     }
-    
+
     /// @notice Classroom call to account a revenue received from a completed course
     function accountRevenue(uint256 revenue) public override {
         require(

@@ -16,17 +16,6 @@ interface IUniversity {
 
     function isValidClassroom(address) external view returns (bool);
 
-    function studentRequestClassroom(
-        address,
-        bytes32,
-        uint24,
-        uint24,
-        int32,
-        uint256,
-        uint256,
-        address
-    ) external returns (address);
-
     function viewMyApplications() external view returns (address[] memory);
 
     function viewStudentApplications(address)

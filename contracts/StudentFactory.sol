@@ -12,5 +12,4 @@ contract StudentFactory is IStudentFactory {
         student.transferOwnership(msg.sender);
         studentAddress = address(student);
     }
-    
 }

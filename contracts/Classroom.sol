@@ -4,7 +4,7 @@ pragma solidity ^0.6.11;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@nomiclabs/buidler/console.sol";
+//import "@nomiclabs/buidler/console.sol";
 import "./interface/Aave/aToken.sol";
 import "./interface/Aave/ILendingPool.sol";
 import "./interface/Aave/ILendingPoolAddressesProvider.sol";
@@ -15,7 +15,6 @@ import "./interface/IStudentApplication.sol";
 import "./interface/IClassroomChallenge.sol";
 import "./interface/IStudentApplicationFactory.sol";
 import "./MyUtils.sol";
-
 
 contract Classroom is Ownable, IClassroom {
     using SafeMath for uint256;
@@ -84,11 +83,14 @@ contract Classroom is Ownable, IClassroom {
         studentApplicationFactory = IStudentApplicationFactory(
             studentApplicationFactoryAddress
         );
+        _seed = keccak256(abi.encode(blockhash(0)));
     }
 
     event LogOpenApplications();
-    event LogCloseApplications();
-    event LogCourseFinished();
+    event LogCloseApplications(uint256);
+    event LogBeginCourse(uint256, uint256);
+    event LogCourseFinished(uint256, uint256);
+    event LogCourseProcessed(uint256, uint256, uint256);
     event LogChangeChallenge(address);
     event LogChangeName(bytes32);
     event LogChangePrincipalCut(uint24);
@@ -106,15 +108,16 @@ contract Classroom is Ownable, IClassroom {
         );
         aaveLendingPoolCore = aaveProvider.getLendingPoolCore();
         aaveLendingPool = ILendingPool(aaveProvider.getLendingPool());
-        aDAI = ILendingPoolCore(aaveLendingPoolCore)
-            .getReserveATokenAddress(daiToken);
+        aDAI = ILendingPoolCore(aaveLendingPoolCore).getReserveATokenAddress(
+            daiToken
+        );
     }
 
     function transferOwnershipClassroom(address newOwner) public override {
         transferOwnership(newOwner);
     }
 
-    function ownerClassroom() public view override returns (address) {
+    function ownerClassroom() public override view returns (address) {
         return owner();
     }
 
@@ -159,7 +162,7 @@ contract Classroom is Ownable, IClassroom {
         emit LogChangeChallenge(challengeAddress);
     }
 
-    function viewMyApplication() public view override returns (address) {
+    function viewMyApplication() public override view returns (address) {
         return viewApplication(_msgSender());
     }
 
@@ -204,33 +207,7 @@ contract Classroom is Ownable, IClassroom {
             "Classroom: applications are already closed"
         );
         openForApplication = false;
-        emit LogCloseApplications();
-    }
-
-    //public onlyOwner allow the professor to apply money before and after closing applications
-    function applyDAI() public onlyOwner {
-        uint256 balance = IERC20(daiToken).balanceOf(address(this));
-        if (balance <= 0) return;
-        uint256 compoundApply = compoundApplyPercentage.mul(balance).div(1e6);
-        uint256 aaveApply = balance.sub(compoundApply);
-        applyFundsCompound(compoundApply);
-        applyFundsAave(aaveApply);
-    }
-
-    function applyFundsCompound(uint256 val) public onlyOwner {
-        if (val == 0) return;
-        TransferHelper.safeApprove(daiToken, cDAI, val);
-        CERC20(cDAI).mint(val);
-    }
-
-    function applyFundsAave(uint256 val) public onlyOwner  {
-        if (val == 0) return;
-        TransferHelper.safeApprove(
-            daiToken,
-            aaveLendingPoolCore,
-            val
-        );
-        aaveLendingPool.deposit(daiToken, val, 0);
+        emit LogCloseApplications(_studentApplications.length);
     }
 
     function studentApply() public override {
@@ -250,6 +227,7 @@ contract Classroom is Ownable, IClassroom {
         require(openForApplication, "Classroom: applications closed");
         address application = _createStudentApplication(address(applicant));
         _studentApplications.push(application);
+        IERC20(daiToken).approve(application, entryPrice); // Allow the student to request refunds using its application
     }
 
     function _createStudentApplication(address student)
@@ -311,19 +289,36 @@ contract Classroom is Ownable, IClassroom {
         return _validStudentApplications.length;
     }
 
-    function beginCourse()
-        public
-        onlyOwner
-    {
+    function _applyDAI() internal {
+        uint256 balance = IERC20(daiToken).balanceOf(address(this));
+        if (balance <= 0) return;
+        uint256 compoundApply = compoundApplyPercentage.mul(balance).div(1e6);
+        uint256 aaveApply = balance.sub(compoundApply);
+        if (compoundApply > 0) _applyFundsCompound(compoundApply);
+        if (aaveApply > 0) _applyFundsAave(aaveApply);
+    }
+
+    function _applyFundsCompound(uint256 val) internal {
+        TransferHelper.safeApprove(daiToken, cDAI, val);
+        CERC20(cDAI).mint(val);
+    }
+
+    function _applyFundsAave(uint256 val) internal {
+        TransferHelper.safeApprove(daiToken, aaveLendingPoolCore, val);
+        aaveLendingPool.deposit(daiToken, val, 0);
+    }
+
+    function beginCourse() public onlyOwner {
         require(!openForApplication, "Classroom: applications are still open");
         require(!classroomActive, "Classroom: course already open");
-        require(
-            IERC20(daiToken).balanceOf(address(this)) == 0,
-            "Classroom: invest all balance before begin"
-        );
         checkApplications();
         _studentApplications = new address[](0);
         if (_validStudentApplications.length == 0) return;
+        emit LogBeginCourse(
+            IERC20(daiToken).balanceOf(address(this)),
+            _validStudentApplications.length
+        );
+        _applyDAI();
         classroomActive = true;
         startDate = block.timestamp;
         endDate = startDate.add(duration);
@@ -352,7 +347,10 @@ contract Classroom is Ownable, IClassroom {
         _courseBalance = IERC20(daiToken).balanceOf(address(this));
         _recoverInvestment();
         courseFinished = true;
-        emit LogCourseFinished();
+        emit LogCourseFinished(
+            _courseBalance,
+            IERC20(daiToken).balanceOf(address(this))
+        );
     }
 
     function courseBalance() public view onlyOwner() returns (uint256) {
@@ -395,14 +393,15 @@ contract Classroom is Ownable, IClassroom {
         require(courseFinished, "Classroom: course not finished");
         coursePostBalance = courseBalance();
         require(
-            coursePostBalance >= entryPrice.mul(_validStudentApplications.length),
+            coursePostBalance >=
+                entryPrice.mul(_validStudentApplications.length),
             "Classroom: not enough DAI to proceed"
         );
         _processPhase = 1;
         studentAllowances = new uint256[](_validStudentApplications.length);
     }
 
-    function startAnswerVerification() public  {
+    function startAnswerVerification() public {
         require(_processPhase > 0, "Classroom: call processResults first");
         require(_processPhase < 2, "Classroom: step already done");
         _startAnswerVerification();
@@ -422,15 +421,16 @@ contract Classroom is Ownable, IClassroom {
     }
 
     function accountValues() public {
-        require(_processPhase > 1, "Classroom: call startAnswerVerification first");
+        require(
+            _processPhase > 1,
+            "Classroom: call startAnswerVerification first"
+        );
         require(_processPhase < 3, "Classroom: step already done");
         _accountValues();
         _processPhase = 3;
     }
 
-    function _accountValues()
-        internal
-    {
+    function _accountValues() internal {
         assert(_processPhase == 2);
         uint256 nStudents = _validStudentApplications.length;
         uint256 returnsPool = coursePostBalance.sub(entryPrice.mul(nStudents));
@@ -444,10 +444,8 @@ contract Classroom is Ownable, IClassroom {
         uint256 professorTotalPoolSuccessShare = successPool.mul(poolCut).div(
             1e6
         );
-        uint256 successStudentPoolShare = successCount > 0 ? 
-            returnsPool
-            .sub(professorTotalPoolSuccessShare)
-            .div(successCount) 
+        uint256 successStudentPoolShare = successCount > 0
+            ? returnsPool.sub(professorTotalPoolSuccessShare).div(successCount)
             : 0;
         for (uint256 i = 0; i < nStudents; i++) {
             uint256 appState = IStudentApplication(_validStudentApplications[i])
@@ -472,10 +470,10 @@ contract Classroom is Ownable, IClassroom {
                     .accountAllowance(0, 0);
         }
         _calculateUniversityShare(
-                professorTotalPoolSuccessShare,
-                nStudents,
-                professorPaymentPerStudent
-            );
+            professorTotalPoolSuccessShare,
+            nStudents,
+            professorPaymentPerStudent
+        );
     }
 
     function _calculateUniversityShare(
@@ -493,10 +491,9 @@ contract Classroom is Ownable, IClassroom {
             .mul(notEmptyCount)
             .mul(uCut)
             .div(1e6);
-        universityCut = 
-            universityEmptyShare.add(universityPaymentShare).add(
-                universitySucessPoolShare
-            );
+        universityCut = universityEmptyShare.add(universityPaymentShare).add(
+            universitySucessPoolShare
+        );
     }
 
     function resolveStudentAllowances() public {
@@ -506,9 +503,7 @@ contract Classroom is Ownable, IClassroom {
         _processPhase = 4;
     }
 
-    function _resolveStudentAllowances()
-        internal
-    {
+    function _resolveStudentAllowances() internal {
         assert(_processPhase == 3);
         for (uint256 i = 0; i < _validStudentApplications.length; i++) {
             if (studentAllowances[i] > 0)
@@ -521,7 +516,10 @@ contract Classroom is Ownable, IClassroom {
     }
 
     function resolveUniversityCut() public {
-        require(_processPhase > 3, "Classroom: call resolveStudentAllowances first");
+        require(
+            _processPhase > 3,
+            "Classroom: call resolveStudentAllowances first"
+        );
         require(_processPhase < 5, "Classroom: step already done");
         _resolveUniversityCut();
         _processPhase = 5;
@@ -538,10 +536,18 @@ contract Classroom is Ownable, IClassroom {
     }
 
     function updateStudentScores() public {
-        require(_processPhase > 4, "Classroom: call resolveUniversityCut first");
+        require(
+            _processPhase > 4,
+            "Classroom: call resolveUniversityCut first"
+        );
         require(_processPhase < 6, "Classroom: step already done");
         _updateStudentScores();
         _processPhase = 6;
+        emit LogCourseProcessed(
+            _validStudentApplications.length,
+            successCount,
+            emptyCount
+        );
     }
 
     function _updateStudentScores() internal {
@@ -595,6 +601,10 @@ contract Classroom is Ownable, IClassroom {
 
     function withdrawAllResults() public onlyOwner {
         require(isClassroomEmpty(), "Can't withdraw with classroom full");
-        TransferHelper.safeTransfer(daiToken, owner(), IERC20(daiToken).balanceOf(address(this)));
+        TransferHelper.safeTransfer(
+            daiToken,
+            owner(),
+            IERC20(daiToken).balanceOf(address(this))
+        );
     }
 }

@@ -16,9 +16,11 @@ interface IStudentApplication {
 
     function applicationState() external view returns(uint256);
 
-    function withdrawAllResults(address) external; 
+    function withdrawAllResults(address) external;
 
-    function withdrawResults(address to, uint256 val) external;
+    function refundPayment(address to) external;
+    
+    function withdraw(address to, uint256 val) external;
 
     function payEntryPrice() external;
 
