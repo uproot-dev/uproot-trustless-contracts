@@ -88,7 +88,7 @@ contract Classroom is Ownable, IClassroom {
 
     event LogOpenApplications();
     event LogCloseApplications(uint256);
-    event LogBeginCourse(uint256, uint256);
+    event LogBeginCourse(uint256, uint256, uint256);
     event LogCourseFinished(uint256, uint256);
     event LogCourseProcessed(uint256, uint256, uint256);
     event LogChangeChallenge(address);
@@ -313,12 +313,13 @@ contract Classroom is Ownable, IClassroom {
         require(!openForApplication, "Classroom: applications are still open");
         require(!classroomActive, "Classroom: course already open");
         checkApplications();
-        _studentApplications = new address[](0);
-        if (_validStudentApplications.length == 0) return;
         emit LogBeginCourse(
             IERC20(daiToken).balanceOf(address(this)),
+            _studentApplications.length,
             _validStudentApplications.length
         );
+        _studentApplications = new address[](0);
+        if (_validStudentApplications.length == 0) return;
         _applyDAI();
         classroomActive = true;
         startDate = block.timestamp;
@@ -601,7 +602,7 @@ contract Classroom is Ownable, IClassroom {
     }
 
     function withdrawAllResults() public onlyOwner {
-        require(isClassroomEmpty(), "Can't withdraw with classroom full");
+        require(isClassroomEmpty(), "Classroom is not empty");
         TransferHelper.safeTransfer(
             daiToken,
             owner(),
