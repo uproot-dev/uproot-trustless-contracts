@@ -4,7 +4,7 @@ require("dotenv").config();
 
 var Web3 = require("web3");
 
-const universityAddress = "0xa03E45a84E253aE34C1298615cC3d140Bc69ECc9";
+const universityAddress = artifacts.require("University").address;
 const daiAddress = "0xf80A32A835F79D7787E8a8ee5721D0fEaFd78108";
 const compoundDAIAddress = "0x6ce27497a64fffb5517aa4aee908b1e7eb63b9ff";
 const comptrollerAddress = "0xe03718b458a2E912141CF3fC8daB648362ee7463";
