@@ -316,6 +316,7 @@ describe("Class process checks", function() {
             expect(await Classroom.connect(teacher1).countNewApplications()).to.equal(
                 0
             );
+            await DAI_ERC20.mock.approve.returns(true);
             await Student1.connect(student1).applyToClassroom(Classroom.address);
             expect(await Classroom.connect(teacher1).countNewApplications()).to.equal(
                 1
@@ -340,9 +341,6 @@ describe("Class process checks", function() {
             await DAI_ERC20.mock.balanceOf
                 .withArgs(Classroom.address)
                 .returns(ethers.utils.parseEther("1000"));
-            expect(Classroom.connect(teacher1).beginCourse()).to.be.revertedWith(
-                "Classroom: invest all balance before begin"
-            );
             expect(Classroom.connect(teacher1).finishCourse()).to.be.revertedWith(
                 "Classroom: no applications"
             );
@@ -364,6 +362,12 @@ describe("Class process checks", function() {
             expect(await Classroom.connect(teacher1).countNewApplications()).to.equal(
                 0
             );
+            expect(
+                await Classroom.connect(teacher1).countReadyApplications()
+            ).to.equal(0);
+            expect(
+                await Classroom.connect(teacher1).countActiveApplications()
+            ).to.equal(0);
             expect(await Classroom.isClassroomEmpty()).to.equal(true);
             await Classroom.connect(teacher1).openApplications();
             expect(await Classroom.openForApplication()).to.equal(true);
@@ -430,35 +434,35 @@ describe("Class process checks", function() {
                 .withArgs(student1._address)
                 .returns(ethers.utils.parseEther("0"));
             expect(
-                StudentApplication1.connect(student1).payEntryPrice()
+                StudentApplication1.connect(student1).payMyEntryPrice()
             ).to.be.revertedWith(
-                "StudentApplication: sender can't pay the entry price"
+                "revert TransferHelper: TRANSFER_FROM_FAILED"
             );
             await DAI_ERC20.mock.balanceOf
                 .withArgs(student1._address)
                 .returns(ethers.utils.parseEther("1000"));
             await DAI_ERC20.mock.balanceOf.returns(ethers.utils.parseEther("1000"));
             await DAI_ERC20.mock.transferFrom.returns(true);
-            await StudentApplication1.connect(student1).payEntryPrice();
+            await StudentApplication1.connect(student1).payMyEntryPrice();
             expect(
                 await Student1.connect(student1).viewMyApplicationState(
                     Classroom.address
                 )
             ).to.equal(1);
-            await StudentApplication2.connect(student2).payEntryPrice();
+            await StudentApplication2.connect(student2).payMyEntryPrice();
             expect(
                 await Student2.connect(student2).viewMyApplicationState(
                     Classroom.address
                 )
             ).to.equal(1);
-            await StudentApplication3.connect(student3).payEntryPrice();
+            await StudentApplication3.connect(student3).payMyEntryPrice();
             await Classroom.connect(teacher1).closeApplications();
             expect(
                 await Student3.connect(student3).viewMyApplicationState(
                     Classroom.address
                 )
             ).to.equal(1);
-            await StudentApplication4.connect(student4).payEntryPrice();
+            await StudentApplication4.connect(student4).payMyEntryPrice();
             expect(
                 await Student4.connect(student4).viewMyApplicationState(
                     Classroom.address
@@ -469,7 +473,7 @@ describe("Class process checks", function() {
                     Classroom.address
                 )
             ).to.equal(0);
-            await StudentApplication5.connect(student5).payEntryPrice();
+            await StudentApplication5.connect(student5).payMyEntryPrice();
             expect(
                 await Student5.connect(student5).viewMyApplicationState(
                     Classroom.address
@@ -478,7 +482,7 @@ describe("Class process checks", function() {
             await DAI_ERC20.mock.balanceOf
                 .withArgs(Classroom.address)
                 .returns(ethers.utils.parseEther("0"));
-            await Classroom.connect(teacher1).beginCourse(false);
+            await Classroom.connect(teacher1).beginCourse();
             expect(await Classroom.connect(teacher1).isCourseOngoing()).to.equal(
                 true
             );
@@ -491,10 +495,10 @@ describe("Class process checks", function() {
             expect(await Classroom.connect(teacher1).isCourseOngoing()).to.equal(
                 true
             );
-            expect(Classroom.connect(teacher1).beginCourse(false)).to.be.revertedWith(
+            expect(Classroom.connect(teacher1).beginCourse()).to.be.revertedWith(
                 "Classroom: course already open"
             );
-            expect(Classroom.connect(teacher1).beginCourse(false)).to.be.revertedWith(
+            expect(Classroom.connect(teacher1).beginCourse()).to.be.revertedWith(
                 "Classroom: course already open"
             );
             expect(

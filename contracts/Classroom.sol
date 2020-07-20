@@ -227,7 +227,7 @@ contract Classroom is Ownable, IClassroom {
         require(openForApplication, "Classroom: applications closed");
         address application = _createStudentApplication(address(applicant));
         _studentApplications.push(application);
-        IERC20(daiToken).approve(application, entryPrice); // Allow the student to request refunds using its application
+        TransferHelper.safeApprove(daiToken, application, entryPrice); // Allow the student to request refunds using its application
     }
 
     function _createStudentApplication(address student)

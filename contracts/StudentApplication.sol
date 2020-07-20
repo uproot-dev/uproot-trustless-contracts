@@ -84,7 +84,7 @@ contract StudentApplication is Ownable, IStudentApplication {
         return address(_challenge);
     }
 
-    function payEntryPrice() external {
+    function payMyEntryPrice() external {
         payEntryPrice(false);
     }
 
